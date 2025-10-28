@@ -15,11 +15,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
 model User {
   id    Int     @default(autoincrement()) @id
-  email String  @unique
-  name  String?
-
+  email String  @unique @db.VarChar(100)
+  name  String  @db.VarChar(255)
+  phone String  @db.VarChar(50)
+  password String @db.VarChar(255)
+  role      UserRole
+  email_verified Boolean  @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@map("users")
+  @@index([id])
+}
+
+enum UserRole {
+  COUCH
+  PLAYER
+  ADMIN
 }

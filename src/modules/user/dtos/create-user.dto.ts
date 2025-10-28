@@ -1,0 +1,36 @@
+import { Transform } from "class-transformer"
+import { IsEmail, IsIn, IsNotEmpty, IsString, MaxLength, MinLength } from "class-validator"
+import { UserRole } from "generated/prisma/enums"
+
+
+
+
+export class CreateUserDto {
+
+    @IsNotEmpty()
+    @IsString()
+    @Transform(({value}) => value.trim())
+    readonly name:string
+
+    @IsNotEmpty()
+    @IsString()
+    @IsEmail()
+    @Transform(({value}) => value.toLowerCase())
+    readonly email:string
+
+    @IsString()
+    @MinLength(11)
+    @MaxLength(11)
+    readonly phone:string
+
+    @IsString()
+    @IsNotEmpty()
+    @MinLength(8)
+    
+    readonly password:string
+
+    @IsString()
+    @IsNotEmpty()
+    @IsIn(["COUCH", "PLAYER"])
+    readonly role:UserRole
+}
