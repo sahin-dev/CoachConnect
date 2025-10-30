@@ -16,11 +16,16 @@ export class AuthController {
 
         return user
     }
+
     @Post("register")
     async registerUser(@Body() registerDto:RegisterUserDto){
-        const user = await this.authService.registerUser(registerDto)
+        const message = await this.authService.registerUser(registerDto)
 
-        return user
+        return {message}
+    }
+
+    async resendCode(@Body()){
+        
     }
 
 }

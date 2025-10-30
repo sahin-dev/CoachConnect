@@ -28,4 +28,14 @@ export class UserService{
         return user
     }
 
+    async updateEmailVerificationStatus(email:string){
+        const user = await this.findUserByEmail(email)
+
+        if(!user){
+            throw new NotFoundException("user not found")
+        }
+
+        await this.prismaService.user.update({where:{id:user.id}, data:{email_verified:true}})
+    }
+
 }

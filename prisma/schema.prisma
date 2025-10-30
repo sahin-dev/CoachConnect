@@ -31,8 +31,31 @@ model User {
   @@index([id])
 }
 
+model Otp {
+  id      Int  @default(autoincrement()) @id
+  code Int
+  for   OtpFor
+  email String
+  expires_in DateTime
+  otp_status OtpStatus @default(CREATED)
+  createdAt  DateTime @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("otps")
+}
+
 enum UserRole {
   COUCH
   PLAYER
   ADMIN
+}
+
+enum OtpStatus {
+  CREATED 
+  VERIFIED
+  INVALID
+}
+
+enum OtpFor {
+  Change_Password
 }

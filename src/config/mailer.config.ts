@@ -3,7 +3,7 @@ import { registerAs } from "@nestjs/config"
 export const MailerConfig = ()=> ({
     host: process.env.MAILER_HOST,
     post: process.env.MAILER_PORT,
-    mail:process.env.MAILER_MAIL,
+    user:process.env.MAILER_MAIL,
     password:process.env.MAILER_PASSWORD,
     service: process.env.MAILER_SERVICE
 })
