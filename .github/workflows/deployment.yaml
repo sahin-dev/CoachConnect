@@ -2,7 +2,7 @@ name: "Deploy to AWS"
 on:
   push:
     branches:
-      - main
+      - build
 
 jobs:
   deploy:   
@@ -11,20 +11,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '22'
-
-      - name: print node version
-        run: |
-            node -v
-            ls -a
-        
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build project
-        run: npm run build
+      - name: print something
+        run: echo "Deploying to AWS..."
 
         
