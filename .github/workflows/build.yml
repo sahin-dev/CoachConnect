@@ -10,17 +10,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout source code
-      - name: Checkout code
-        uses: actions/checkout@v4
+        - name: logging 
+          run : ls
 
-      - name: logging
-        run: |
-            ls
-            echo "Build job completed."
-      - name: build
-        run : npm run build
-      - name: console again
-        run: |
-            ls
-            echo "Build job completed again."
+        - name: Checkout code
+          uses: actions/checkout@v2
+
+        - name: print something
+          run: ls
+
+        - name: Setup Node.js
+          uses: actions/setup-node@v2
+          with:
+            node-version: '22'
+
+        - name: Install dependencies
+          run: npm install  
+
+        - name: build project
+          run: npm run build
+
+        - name: Build project
+          run: echo "Building the project..."   
+          
+        - name: Push Artifacts
+          run: echo "Pushing build artifacts..."
