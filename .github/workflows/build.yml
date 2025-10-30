@@ -14,7 +14,7 @@ jobs:
           run : ls
 
         - name: Checkout code
-          uses: actions/checkout@v2
+          uses: actions/checkout@v5
 
         - name: print something
           run: ls
@@ -23,15 +23,3 @@ jobs:
           uses: actions/setup-node@v2
           with:
             node-version: '22'
-
-        - name: Install dependencies
-          run: npm install  
-
-        - name: build project
-          run: npm run build
-
-        - name: Build project
-          run: echo "Building the project..."   
-          
-        - name: Push Artifacts
-          run: echo "Pushing build artifacts..."
