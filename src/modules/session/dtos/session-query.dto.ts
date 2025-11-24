@@ -1,0 +1,35 @@
+import { Transform } from "class-transformer";
+import { ArrayMaxSize, ArrayMinSize, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { PaginationDto } from "src/common/dtos/pagination.dto";
+
+export class SessionQueryDto extends PaginationDto {
+
+    @IsOptional()
+    @IsNotEmpty()
+    @IsString()
+    query:string
+
+    @ArrayMinSize(2)
+    @ArrayMaxSize(2)
+    @IsNumber({}, {each:true})
+    @IsOptional()
+    @IsNotEmpty()
+    @Transform(obj => {
+        console.log(obj.value)
+        if(obj.value)
+            return obj.value.split(",").map(item => Number(item))
+    })
+    location:number[]
+
+    @IsNumber()
+    @Min(0)
+    @IsNotEmpty()
+    @IsOptional()
+    @Transform((obj) => {
+        if(obj.value){
+            return Number(obj.value)
+        }
+    })
+    radius:number
+
+}

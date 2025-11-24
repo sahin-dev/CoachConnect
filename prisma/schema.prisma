@@ -5,57 +5,146 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
   moduleFormat = "cjs"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
-
 model User {
-  id    Int     @default(autoincrement()) @id
-  email String  @unique @db.VarChar(100)
-  name  String  @db.VarChar(255)
-  phone String  @db.VarChar(50)
-  password String @db.VarChar(255)
-  role      UserRole
-  email_verified Boolean  @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                    String               @id @default(auto()) @map("_id") @db.ObjectId
+  avatar                String?
+  email                 String               @unique
+  fullName              String
+  phone                 String
+  password              String
+  role                  UserRole
+  email_verified        Boolean              @default(false)
+  is_deleted            Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  participated_sessions SessionParticipant[]
+  created_sessions      Session[]
 
   @@map("users")
-  @@index([id])
+}
+
+model Session {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  banner              String
+  coach_id            String   @db.ObjectId
+  title               String
+  location            Json
+  description         String
+  additional_notes    String?
+  address             String
+  participant_min_age Int
+  started_at           DateTime
+  max_participants    Int
+  fee                 Float
+  status               SessionStatus @default(CREATED)
+  objectives String[]
+  equipments String[]
+
+  coach        User                 @relation(references: [id], fields: [coach_id], onDelete: Cascade)
+  participants SessionParticipant[]
+
+  refund_requests   RefundRequest[]
+
+  @@map("sessions")
+}
+
+model SessionParticipant {
+  id             String                   @id @default(auto()) @map("_id") @db.ObjectId
+  player_id      String                   @db.ObjectId
+  session_id     String                   @db.ObjectId
+  payment_status ParticipantPaymentStatus @default(Pending)
+  payment_method PaymentMethod
+  player_status  PlayerStatus @default(Attending)
+
+  session Session @relation(references: [id], fields: [session_id], onDelete: Cascade)
+  player  User    @relation(references: [id], fields: [player_id], onDelete: Cascade)
+  refund_request RefundRequest?
+
+  @@map("session_participants")
+}
+
+model RefundRequest {
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  participant_id      String  @db.ObjectId @unique
+  session_id        String   @db.ObjectId
+  status            RefundRequestStatus  @default(Pending)
+
+  participant  SessionParticipant  @relation(references: [id], fields: [participant_id])
+  session      Session    @relation(references: [id], fields: [session_id])
+
+  @@map("refund_requests")
 }
 
 model Otp {
-  id      Int  @default(autoincrement()) @id
-  code Int
-  for   OtpFor
-  email String
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  code       Int
+  for        OtpFor
+  email      String
   expires_in DateTime
   otp_status OtpStatus @default(CREATED)
-  createdAt  DateTime @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@map("otps")
 }
 
 enum UserRole {
-  COUCH
+  COACH
   PLAYER
   ADMIN
 }
 
+type Coards {
+  lat Float
+  long  Float
+}
+
+enum RefundRequestStatus {
+  Pending
+  Completed
+  Cancelled
+
+}
+enum SessionStatus {
+  CREATED
+  ONGOING
+  COMPLETED
+}
+
 enum OtpStatus {
-  CREATED 
+  CREATED
   VERIFIED
   INVALID
 }
 
+enum ParticipantPaymentStatus {
+  Cash
+  Paid
+  Pending
+  Refunded
+}
+
+enum PaymentMethod {
+  ONLINE
+  CASH
+}
+
+enum PlayerStatus {
+  Attending
+  Cancelled
+}
+
 enum OtpFor {
-  Change_Password
+  Forget_Password
+  Email_Verification
 }

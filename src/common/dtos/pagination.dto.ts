@@ -5,9 +5,9 @@ export class PaginationDto{
 
     @IsOptional()
     @Transform(({value}) => Number(value))
-    page:number 
+    page:number  = 1
 
     @IsOptional()
     @Transform(({value}) => Number(value))
-    limit:number
+    limit:number = 20
 }

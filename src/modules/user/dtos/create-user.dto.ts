@@ -10,7 +10,7 @@ export class CreateUserDto {
     @IsNotEmpty()
     @IsString()
     @Transform(({value}) => value.trim())
-    readonly name:string
+    readonly fullName:string
 
     @IsNotEmpty()
     @IsString()
@@ -19,8 +19,7 @@ export class CreateUserDto {
     readonly email:string
 
     @IsString()
-    @MinLength(11)
-    @MaxLength(11)
+
     readonly phone:string
 
     @IsString()
@@ -31,6 +30,6 @@ export class CreateUserDto {
 
     @IsString()
     @IsNotEmpty()
-    @IsIn(["COUCH", "PLAYER"])
+    @IsIn(["COACH", "PLAYER"])
     readonly role:UserRole
 }

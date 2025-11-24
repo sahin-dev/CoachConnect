@@ -1,12 +1,9 @@
-import { Expose } from "class-transformer";
+import { Expose } from "class-transformer"
 
-export class UserResponseDto {
+export class SignInResponseDto{
 
     @Expose()
     id:string
-
-    @Expose()
-    avatar:string
 
     @Expose()
     fullName:string
@@ -18,11 +15,13 @@ export class UserResponseDto {
     phone:string
 
     @Expose()
-    role:string
-
-    @Expose()
     email_verified:boolean
 
     @Expose()
-    is_deleted:boolean
+    role:string
+
+    @Expose()
+    token:string
+
+
 }
