@@ -6,9 +6,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CoachCancelStrategy } from './strategies/CoachCancelStrategy';
 import { PlayerCancelStrategy } from './strategies/PlayerCancelStrategy';
 import { RefundModule } from '../refund/refund.module';
+import { UserService } from '../user/user.service';
+import { UserModule } from '../user/user.module';
 
 @Module({
-    imports:[RefundModule],
+    imports:[RefundModule, UserModule],
     controllers:[SessionController],
     providers:[
         SessionService,

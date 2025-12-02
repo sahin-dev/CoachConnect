@@ -25,9 +25,13 @@ model User {
   role                  UserRole
   email_verified        Boolean              @default(false)
   is_deleted            Boolean              @default(false)
+  is_blocked            Boolean              @default(false)
+
   participated_sessions SessionParticipant[]
   created_sessions      Session[]
   stripe_customer_id    String?
+
+  chat_rooms            ChatMember[]
 
   sent_chats          Chat[]  @relation(name: "sent_chats")
   received_chats      Chat[]  @relation(name: "received_chats")
@@ -74,7 +78,7 @@ model SessionParticipant {
   session_id     String                   @db.ObjectId
   payment_status ParticipantPaymentStatus @default(Pending)
   payment_method PaymentMethod
-  player_status  PlayerStatus @default(Attending)
+  player_status  PlayerStatus @default(Pending)
 
   session Session @relation(references: [id], fields: [session_id], onDelete: Cascade)
   player  User    @relation(references: [id], fields: [player_id], onDelete: Cascade)
@@ -129,21 +133,53 @@ model Otp {
   @@map("otps")
 }
 
+model ChatRoom {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  members     ChatMember[]  
+
+  chats     Chat[]  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chat_rooms")
+}
+
+model ChatMember {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatRoom_id String   @db.ObjectId
+  user_id   String   @db.ObjectId
+
+  chatRoom  ChatRoom @relation(references: [id], fields: [chatRoom_id], onDelete: Cascade)
+  user      User     @relation(references: [id], fields: [user_id], onDelete: Cascade)
+
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chat_members")
+}
+
 model Chat {
-  id      String  @id  @default(auto()) @map("_id") @db.ObjectId
-  message String
-  files  String[]
-  hasFile  Boolean  @default(false)
-  sender_id  String  @db.ObjectId
-  receiver_id  String @db.ObjectId
-  is_read  Boolean  @default(false)
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatRoom_id String   @db.ObjectId
+  sender_id   String   @db.ObjectId
+  receiver_id String   @db.ObjectId
+  message     String
+  file_url    Bytes?
+  type      MessageType @default(TEXT)
+  is_read     Boolean  @default(false)
+  is_delivered Boolean  @default(false)
 
-  sender   User  @relation(references: [id], fields: [sender_id], name: "sent_chats")
-  receiver  User @relation(references: [id], fields: [receiver_id], name: "received_chats")
+  chatRoom    ChatRoom @relation(references: [id], fields: [chatRoom_id], onDelete: Cascade)
+  sender      User     @relation(name: "sent_chats", references: [id], fields: [sender_id], onDelete: Cascade)
+  receiver    User     @relation(name: "received_chats", references: [id], fields: [receiver_id], onDelete: Cascade)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  @@map("chats")
 }
 
 enum UserRole {
@@ -152,6 +188,13 @@ enum UserRole {
   ADMIN
 }
 
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
 type Coards {
   lat Float
   long  Float
@@ -196,6 +239,7 @@ enum PaymentMethod {
 }
 
 enum PlayerStatus {
+  Pending
   Attending
   Cancelled
 }

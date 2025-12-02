@@ -10,7 +10,7 @@ import { OtpGenerator } from "src/common/providres/OtpGenerator.provider";
     imports:[],
     controllers:[UserController],
     providers:[PrismaService, UserService, EncoderProvider, SMTPProvider, OtpGenerator],
-    exports:[UserService]
+    exports:[UserService, EncoderProvider, SMTPProvider, OtpGenerator]
 })
 
 export class UserModule{

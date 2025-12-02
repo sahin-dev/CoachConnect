@@ -2,11 +2,9 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Unauthorize
 import { SessionBuilder } from "./providers/SessionBuilder.provider";
 import { CreateSessionDto } from "./dtos/create-session.dto";
 import { PrismaService } from "../prisma/prisma.service";
-import { title } from "process";
 import { PaginationDto } from "src/common/dtos/pagination.dto";
 import { CoachSessionDto } from "./dtos/get-upcoming-session.dto";
-import { GetEnrolledPlayerDto } from "./dtos/get-enrolled-player.dto";
-import { ParticipantPaymentStatus, PaymentMethod, SessionStatus } from "generated/prisma/enums";
+import { ParticipantPaymentStatus, PaymentMethod, PlayerStatus, SessionStatus } from "generated/prisma/enums";
 import { EnrollSessionDto } from "./dtos/enroll-session.dto";
 import { UpdateSessionDto } from "./dtos/update-session.dto";
 import { CancelSessionDto } from "./dtos/cancel-session.dto";
@@ -14,6 +12,11 @@ import { SessionQueryDto } from "./dtos/session-query.dto";
 import type { SessionCancelStrategy } from "./strategies/SessionCancelStrategy.interface";
 import { CoachCancelStrategy } from "./strategies/CoachCancelStrategy";
 import { PlayerCancelStrategy } from "./strategies/PlayerCancelStrategy";
+import { UserRole } from "generated/prisma/enums";
+import { GetPlayerEnrolledSessionDto } from "./dtos/get-player-enrolled-session.dto";
+import { UserService } from "../user/user.service";
+import { Session } from "node:inspector/promises";
+
 
 @Injectable()
 export class SessionService {
@@ -21,6 +24,7 @@ export class SessionService {
     constructor (
         private readonly sessionBuilder:SessionBuilder,
         private readonly prismaService:PrismaService,
+        private readonly userService:UserService,
 
         @Inject(CoachCancelStrategy.INJECTION_KEY)
         private readonly coachCancelStrategy:SessionCancelStrategy,
@@ -30,7 +34,6 @@ export class SessionService {
 
     ){}
 
-    
     /**
      * a coach can create session
      * @param userId 
@@ -44,41 +47,62 @@ export class SessionService {
         /**
          * use session builder to create session object
          */
-        const sessionBuilder  = this.sessionBuilder
+
+        try{
+            const sessionBuilder  = this.sessionBuilder
         
-        .setCoach(userId)
-        .setTitle(createSessionDto.title)
-        .setDescription(createSessionDto.description)
-        .setLocation({lat:createSessionDto.location[0], long:createSessionDto.location[1]})
-        .setEquipments(createSessionDto.equipments)
-        .setObjectives(createSessionDto.objectives)
-        .setFee(createSessionDto.fee)
-        .setMaxParticipant(createSessionDto.max_participants)
-        .setMinimumAge(createSessionDto.min_age)
-        .setStartTime(createSessionDto.start_date, createSessionDto.start_time)
-        .setBanner(file)
-        .setAddress(createSessionDto.address)
-    
-        return await this.prismaService.session.create({data:sessionBuilder.build()})
+                .setCoach(userId)
+                .setTitle(createSessionDto.title)
+                .setDescription(createSessionDto.description)
+                .setLocation({lat:createSessionDto.location[0], long:createSessionDto.location[1]})
+                .setEquipments(createSessionDto.equipments)
+                .setObjectives(createSessionDto.objectives)
+                .setFee(createSessionDto.fee)
+                .setMaxParticipant(createSessionDto.max_participants)
+                .setMinimumAge(createSessionDto.min_age)
+                .setStartAt(createSessionDto.start_date, createSessionDto.start_time)
+                .setBanner(file)
+                .setAddress(createSessionDto.address)
+            
+            return await this.prismaService.session.create({data:sessionBuilder.build()})
+
+        }catch (err:any){
+            throw new BadRequestException(err.message)
+
+        }
+       
     }
 
 
-    /**
-     * 
-     */
+   /**
+    * 
+    * @param userId 
+    * @param sessionQuery 
+    * @returns 
+    */
     async getSessions(userId:string , sessionQuery:SessionQueryDto){
 
         const skip = ( sessionQuery.page - 1 ) * sessionQuery.limit
 
 
-        const sessions = await this.prismaService.session.findMany({
-            where:{title:{contains:sessionQuery.query}, status:SessionStatus.CREATED}, 
-            skip, 
-            take:sessionQuery.limit})
+        const [sessions, total] = await this.prismaService.$transaction(
+            [ this.prismaService.session.findMany({
+                where:{title:{contains:sessionQuery.query,mode:"insensitive"},participants:{none:{player_id:userId}}, status:SessionStatus.CREATED}, 
+                skip, 
+                take:sessionQuery.limit,
+                include:{ _count:{select:{participants:true}}}
+            }),  
+            this.prismaService.session.count({
+                where:{title:{contains:sessionQuery.query,mode:"insensitive"},participants:{none:{player_id:userId}}, status:SessionStatus.CREATED}
+            })])
 
-  
+        const mappedSessions = sessions.map(session => {
 
-        return sessions
+            return {...session, left: session.max_participants - session._count.participants}
+        })
+
+
+        return {sessions:mappedSessions, total}
 
     }
 
@@ -92,29 +116,36 @@ export class SessionService {
      * @param pagination 
      * @returns 
      */
+    
     async getCoachUpcomingSessions(coachId:string, pagination:PaginationDto){
 
        // window for upcoming sessions
         const upcomingWindow = this.upcomingSessionWindow(3)
-
+        console.log(upcomingWindow)
         const skip = (pagination.page - 1) * pagination.limit
 
-        const sessions = await this.prismaService.session.findMany({
-            where:{coach_id:coachId, started_at:upcomingWindow, status:SessionStatus.CREATED},
-            orderBy:{started_at:"desc"}, 
-            skip, 
-            take:pagination.limit,
-            
-        })
+        const sessions = await this.prismaService.session.findMany()
+
+        const [sessio, total] = await this.prismaService.$transaction([
+            this.prismaService.session.findMany({
+                where:{coach_id:coachId, started_at:upcomingWindow, status:SessionStatus.CREATED},
+                orderBy:{started_at:"desc"}, 
+                skip, 
+                take:pagination.limit,
+                include:{_count:{select:{participants:true}}
+            }}),
+            this.prismaService.session.count({
+                where:{coach_id:coachId, started_at:upcomingWindow, status:SessionStatus.CREATED}})
+        ])
 
         const sessionWithJoinDetails = await Promise.all (sessions.map(async session => {
         
             const joindParticipant = await this.prismaService.sessionParticipant.count({where:{session_id:session.id}})
 
-            return {session , left:session.max_participants - joindParticipant}
+            return {...session , left:session.max_participants - joindParticipant}
         }))
 
-        return sessionWithJoinDetails
+        return {sessions:sessionWithJoinDetails, total}
 
     }
 
@@ -127,9 +158,9 @@ export class SessionService {
      */
     private upcomingSessionWindow(windowLength:number ) {
         const currentDate = new Date(Date.now())
-        const afterThreeDays = new Date(currentDate.getTime() + windowLength * 24 * 60 * 1000)
+        const afterThreeDays = new Date(currentDate.getTime() + windowLength * 24 * 60 * 60 * 1000)
 
-        return {gte:currentDate, let:afterThreeDays}
+        return {gte:currentDate, lte:afterThreeDays}
     }
 
 
@@ -142,16 +173,24 @@ export class SessionService {
      * @param pagination 
      * @returns 
      */
-    async getAvailableSessions(coachAvailableSessionDto:CoachSessionDto, pagination:PaginationDto) {
+    async getAvailableSessions(coachId:string, pagination:PaginationDto) {
          const skip = (pagination.page - 1) * pagination.limit
 
-        const sessions = await this.prismaService.session.findMany({
-            where:{coach_id:coachAvailableSessionDto.coachId, participants:{none:{}}},
-            skip,
-            take:pagination.limit
-        })
+         const [sessions, total] = await this.prismaService.$transaction([
+            this.prismaService.session.findMany({
+                where:{coach_id:coachId, participants:{none:{}}, status:SessionStatus.CREATED},
+                skip,
+                take:pagination.limit
+            }), 
+            this.prismaService.session.count({
+                where:{coach_id:coachId, participants:{none:{}}, status:SessionStatus.CREATED}
+            })
+         ])
+        
 
-        return sessions
+     
+
+        return {sessions, total}
     }
 
 
@@ -163,23 +202,27 @@ export class SessionService {
      * @param pagination 
      * @returns 
      */
-    async getActiveSessions(coachActiveSessionDto:CoachSessionDto, pagination:PaginationDto){
+    async getActiveSessions(coachId:string, pagination:PaginationDto){
 
         const skip = (pagination.page - 1) * pagination.limit
-        const sessions = await this.prismaService.session.findMany({
-            where:{coach_id:coachActiveSessionDto.coachId, participants:{some:{}}},
-            include:{_count:{select:{participants:true}}}, 
-            skip, 
-            take:pagination.limit
-        })
-
+        const [sessions, total] = await this.prismaService.$transaction([
+            this.prismaService.session.findMany({
+                where:{coach_id:coachId, participants:{some:{}}, status:SessionStatus.CREATED},
+                skip,
+                take:pagination.limit,
+                include:{_count:{select:{participants:true}}}
+            }), 
+            this.prismaService.session.count({
+                where:{coach_id:coachId, participants:{some:{}}, status:SessionStatus.CREATED}
+            })
+         ])
         const mappedActiveSession = sessions.map( session => {
             const {_count, ...sessionDetails} = session
-
             return {session:sessionDetails, joind:_count.participants}
         })
 
-        return mappedActiveSession
+
+        return {sessions:mappedActiveSession, total}
 
     }
 
@@ -190,7 +233,7 @@ export class SessionService {
      * @returns 
      */
 
-    async updateSession(userId:string, updateSessionDto:UpdateSessionDto){
+    async updateSession(userId:string, updateSessionDto:UpdateSessionDto, file?:Express.Multer.File){
         const session  = await this.prismaService.session.findUnique({where:{id:updateSessionDto.sessionId}})
 
         if(!session){
@@ -218,6 +261,10 @@ export class SessionService {
             updatedData.location = {type:"Point",coordinates:updateSessionDto.location}
         }
 
+        if(file){
+            updatedData.banner = file.path
+        }
+
         const updatedSession = await this.prismaService.session.update({where:{id:session.id}, data:updatedData})
 
 
@@ -243,7 +290,8 @@ export class SessionService {
             throw new NotFoundException("user not found")
         }
 
-        if(user.role  === "COACH"){
+        if(user.role  === UserRole.COACH){
+            
             return await this.cancelSessionByCoach(user.id, cancelSessionDto)
         }
 
@@ -322,10 +370,10 @@ export class SessionService {
         
 
         if(!(await this.isSessionValidToJoin(playerId, enrollSessionDto.sessionId))){
-            throw new BadRequestException("session does not exist or no slot available")
+            throw new BadRequestException("session is not available to join")
         }
 
-        if(await this.playerAlreadyEnrolled(playerId, enrollSessionDto.sessionId)){
+        if(await this.isPlayerAlreadyEnrolled(playerId, enrollSessionDto.sessionId)){
             throw new BadRequestException("you are already enrolled in this session")
         }
 
@@ -333,13 +381,13 @@ export class SessionService {
             data:{player_id:playerId,
                  session_id:enrollSessionDto.sessionId, 
                  payment_method:enrollSessionDto.paymentMethod,
-                 payment_status:ParticipantPaymentStatus.Pending,
-
+                 ...(enrollSessionDto.paymentMethod === PaymentMethod.CASH ? {payment_status:ParticipantPaymentStatus.Cash, player_status:PlayerStatus.Attending}:{})
             }})
+        
             // redirect the user to payment page if payment method is online
         if(sessionParticipant.payment_method === PaymentMethod.ONLINE){
 
-            return "User will redirect to payment page"
+            return {url:"stripe hosted payment page"}
         }
 
         return sessionParticipant
@@ -354,16 +402,29 @@ export class SessionService {
     * @param getEnrolledPlayer 
     * @returns 
     */
-    async getEnrolledPlayers (getEnrolledPlayer:GetEnrolledPlayerDto){
+    async getEnrolledPlayers (coachId:string, paginationDto:PaginationDto){
 
-        const enrolledPlayer = await this.prismaService.sessionParticipant.findMany({
-            where:{session:{coach_id:getEnrolledPlayer.coachId}, 
-                OR:[{payment_status:ParticipantPaymentStatus.Cash},
-                    {payment_status:ParticipantPaymentStatus.Paid}]},
-            include:{player:true, session:true}
+        const skip = (paginationDto.page - 1) * paginationDto.limit
+
+        const [enrolledPlayer, total] = await this.prismaService.$transaction([
+            this.prismaService.sessionParticipant.findMany({
+
+            where:{session:{coach_id:coachId}, player_status:PlayerStatus.Attending},
+            orderBy:{createdAt:"desc"},
+
+            include:{player:true, session:true},
+            skip,
+            take: paginationDto.limit
+        }),
+
+        this.prismaService.sessionParticipant.count({
+
+            where:{session:{coach_id:coachId}, player_status:PlayerStatus.Attending},
         })
 
-        return enrolledPlayer
+        ])
+        
+        return {players:enrolledPlayer, total}
         
     }
 
@@ -374,14 +435,29 @@ export class SessionService {
      * @param getCancelledPlayer 
      * @returns 
      */
-     async getCancelledPlayer (getCancelledPlayer:GetEnrolledPlayerDto){
+     async getCancelledPlayer (coachId:string, paginationDto:PaginationDto){
 
-        const enrolledPlayer = await this.prismaService.sessionParticipant.findMany({
-            where:{session:{coach_id:getCancelledPlayer.coachId},payment_status:ParticipantPaymentStatus.Refunded},
-            include:{player:true, session:true}
+       const skip = (paginationDto.page - 1) * paginationDto.limit
+
+        const [cancelledPlayers, total] = await this.prismaService.$transaction([
+            this.prismaService.sessionParticipant.findMany({
+
+            where:{session:{coach_id:coachId}, player_status:PlayerStatus.Cancelled},
+            orderBy:{createdAt:"desc"},
+
+            include:{player:true, session:true},
+            skip,
+            take: paginationDto.limit
+        }),
+
+        this.prismaService.sessionParticipant.count({
+
+            where:{session:{coach_id:coachId}, player_status:PlayerStatus.Cancelled},
         })
 
-        return enrolledPlayer
+        ])
+        
+        return {players:cancelledPlayers, total}
         
     }
 
@@ -398,10 +474,7 @@ export class SessionService {
             where:{id:sessionId, status:SessionStatus.CREATED}, 
             include:{_count:{select:{
                 participants:{
-                    where:{OR:[{payment_status:ParticipantPaymentStatus.Cash}, 
-                        {payment_status:ParticipantPaymentStatus.Paid}
-
-                        ]}
+                    where:{player_status:PlayerStatus.Attending}
                 }
             }}}
         })
@@ -417,13 +490,76 @@ export class SessionService {
      * @param sessionId 
      * @returns boolean
      */
-    private async playerAlreadyEnrolled(playerId:string, sessionId:string){
+    private async isPlayerAlreadyEnrolled(playerId:string, sessionId:string){
 
         const participant = await this.prismaService.sessionParticipant.count({where:{player_id:playerId, session_id:sessionId}})
 
         return participant > 0 ? true : false
     }
 
+    /**
+     * 
+     * @param userId 
+     * @param getPlayerSessionDto 
+     * @returns 
+     */
+
+    async getPlayerEnrolledSessions(userId:string, getPlayerSessionDto:GetPlayerEnrolledSessionDto){
+     
+        if (getPlayerSessionDto.status === SessionStatus.ONGOING){
+
+            const [enrolledSessions, total] = await this.prismaService.$transaction([
+                this.prismaService.session.findMany({
+                where:{participants:{some:{player_id:userId, player_status:PlayerStatus.Attending}}, 
+                    OR:[{status:SessionStatus.CREATED}, {status:SessionStatus.ONGOING}]
+                    },
+                    include:{coach:true}
+                }),
+
+                this.prismaService.session.count({
+                where:{participants:{some:{player_id:userId, player_status:PlayerStatus.Attending}}, 
+                    OR:[{status:SessionStatus.CREATED}, {status:SessionStatus.ONGOING}]
+                    }
+                }),
+
+            ])
+           
+           
+        
+            return {sessions:enrolledSessions, total}
+        }
+
+        const [enrolledSessions, total] = await this.prismaService.$transaction([
+                this.prismaService.session.findMany({
+                where:{participants:{some:{player_id:userId, player_status:PlayerStatus.Attending}}, 
+                    OR:[{status:SessionStatus.CREATED}, {status:SessionStatus.ONGOING}]
+                    },
+                    include:{coach:true}
+                }),
+
+                this.prismaService.session.count({
+                where:{participants:{some:{player_id:userId, player_status:PlayerStatus.Attending}}, 
+                    status:getPlayerSessionDto.status}
+                }),
+
+            ])
+
+        return {sessions:enrolledSessions, total}
+        
+    }
+
+
+    async getSessionDetailsById(userId:string, sessionId:string){
+
+        
+        const session = await this.prismaService.session.findUnique({where:{id:sessionId}, include:{coach:true, participants:{where:{player_id:userId}}}})
+       
+        if(!session){
+            throw new NotFoundException("session not found")
+        }
+
+        return session
+    }
 
 
 }

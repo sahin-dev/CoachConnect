@@ -1,9 +1,13 @@
-import { Expose } from "class-transformer"
+import { Expose, Type } from "class-transformer"
 import { ValidateNested } from "class-validator"
 import { ParticipantPaymentStatus, PaymentMethod } from "generated/prisma/enums"
+import { SessionResponseDto } from "./session-response.dto"
+import { PaginationResponseDto } from "./pagination-response.dto"
 
 
-class EnrolledPlayerResponseDto {
+
+
+class PlayerResponseDto {
     @Expose()
     id:string
 
@@ -14,31 +18,31 @@ class EnrolledPlayerResponseDto {
     fullName:string
 }
 
-class EnrolledPalyerSessionResponseDto {
+class EnrolledPlayerAndSessionResponseDto {
     @Expose()
-    id:string
-    
-    @Expose()
-    title:string
-
-    @Expose()
-    address:string
-}
-
-export class GetEnrolledPlayerResponseDto {
+    @ValidateNested()
+    @Type(() => SessionResponseDto)
+    session:SessionResponseDto
 
     @Expose()
     @ValidateNested()
-    session:EnrolledPalyerSessionResponseDto
-
-    @Expose()
-    @ValidateNested()
-    player:EnrolledPlayerResponseDto
+    @Type(() => PlayerResponseDto)
+    player:PlayerResponseDto
 
     @Expose()
     payment_status:ParticipantPaymentStatus
     
     @Expose()
     payment_method:PaymentMethod
+}
+
+export class GetEnrolledPlayerResponseDto  extends PaginationResponseDto{
+
+    @Expose()
+    @ValidateNested()
+    @Type(() => EnrolledPlayerAndSessionResponseDto)
+    players:EnrolledPlayerAndSessionResponseDto
+    
+  
 
 }

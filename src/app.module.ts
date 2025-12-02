@@ -12,6 +12,7 @@ import { RefundModule } from './modules/refund/refund.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { RolesGuard } from './common/guards/roles.guards';
 
 
 @Module({
@@ -29,6 +30,7 @@ import { NotificationModule } from './modules/notification/notification.module';
   providers: [
     JwtService,
     { provide: APP_GUARD, useClass: JwtGuard },
+    { provide: APP_GUARD, useClass: RolesGuard }
     
   ],
 

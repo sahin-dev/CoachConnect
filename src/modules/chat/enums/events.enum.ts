@@ -1,7 +1,11 @@
-export enum Events  {
+export enum EMIT_EVENTS  {
     NEW_MESSAGE = "new-message",
-    NEW_FILE = "new-file",
-    ALL_ROOMS = "all-rooms",
+
+    MESSAGE_SENT = "message-sent",
+    MESSAGE_DELIVERED = "message-delivered",
+    MESSAGE_READ = "message-read",
+
+    ALL_CHAT_ROOMS = "all-chat-rooms",
     ALL_MESSAGES = "all-messages",
     SUCCESS = "success",
     ERROR = "error"
@@ -9,8 +13,10 @@ export enum Events  {
 }
 
 export enum SUBSCRIBED_EVENTS {
-    FETCH_ROOMS = "fetch-rooms",
+    FETCH_CHAT_ROOMS = "fetch-chat-rooms",
     MESSAGE  = "message",
     FETCH_MESSAGES = "fetch-messages",
-    SEND_FILE = "send-file"
+    SEND_FILE = "send-file",
+
+    MESSAGE_RECEIVED = "message-received",
 }

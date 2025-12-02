@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Logger, Post, Req } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { SigninDto } from "./dtos/signin.dto";
 import { RegisterUserDto } from "./dtos/register-user.dto";
@@ -16,11 +16,13 @@ import { UserResponseDto } from "../user/dtos/user-response.dto";
 })
 export class AuthController {
 
-    constructor(private readonly authService:AuthService){}
+
+
+    constructor(private readonly authService:AuthService,){}
 
     @Post("signin")
     @Public()
-    @ResponseMessage("user sign in successfully")
+    @ResponseMessage("user signed in")
     async signinUser(@Body() signinDto:SigninDto){
         const user = await this.authService.signin(signinDto)
         
@@ -29,13 +31,22 @@ export class AuthController {
         })
     }
 
+    @Post("admin/signin")
+    @Public()
+    @ResponseMessage("admin signed in")
+    async adminSignin(@Body() signinDto:SigninDto){
+        const user =  await this.authService.adminSignIn(signinDto)
+
+        return plainToInstance(SignInResponseDto,user, {
+            excludeExtraneousValues:true
+        })
+    }
+
     @Post("register")
     @Public()
-    @ResponseMessage("user register successfully")
+    @ResponseMessage("A verification mail sent to your email.")
     async registerUser(@Body() registerDto:RegisterUserDto){
-        const message = await this.authService.registerUser(registerDto)
-
-        return {message}
+        await this.authService.registerUser(registerDto)
     }
 
     @Post("verify-email")

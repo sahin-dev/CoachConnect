@@ -1,5 +1,6 @@
 import { Exclude, Expose, Type } from "class-transformer"
 import { ValidateNested } from "class-validator"
+import { SessionResponseDto } from "./session-response.dto"
 
 class UpcomingSessionResponseDto {
 
@@ -24,10 +25,10 @@ export class CoachUpcomingSessionResponseDto{
 
     @Expose()
     // @ValidateNested()
-    @Type(() => UpcomingSessionResponseDto)
-    session:UpcomingSessionResponseDto
+    @Type(() => SessionResponseDto)
+    sessions:SessionResponseDto
 
     @Expose()
-    left:number
+    total:number
 }
 

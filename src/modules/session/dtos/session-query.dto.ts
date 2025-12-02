@@ -15,9 +15,9 @@ export class SessionQueryDto extends PaginationDto {
     @IsOptional()
     @IsNotEmpty()
     @Transform(obj => {
-        console.log(obj.value)
+    
         if(obj.value)
-            return obj.value.split(",").map(item => Number(item))
+            return obj.value.split(",").map((item:string) => Number(item))
     })
     location:number[]
 

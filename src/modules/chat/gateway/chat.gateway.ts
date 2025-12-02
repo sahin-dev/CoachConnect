@@ -1,22 +1,41 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UsePipes, ValidationPipe } from "@nestjs/common";
 import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer, WsException } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
 import { ChatService } from "../chat.service";
-import { Events, SUBSCRIBED_EVENTS } from "../enums/events.enum";
+import { EMIT_EVENTS, SUBSCRIBED_EVENTS } from "../enums/events.enum";
+import { SendMessageDto } from "../dtos/send-message.dto";
+import { UserService } from "src/modules/user/user.service";
+import { plainToInstance } from "class-transformer";
+import { AllMessageDto } from "../dtos/all-message.dto";
+import { GetAllMessagesDto } from "../dtos/get-all-messages.dto";
+import { GetUserRoomsDto } from "../dtos/get-user-rooms.dto";
+import { AllUserRoomsDto } from "../dtos/all-user-rooms.dto";
+import { MessageAcknowledgementDto } from "../dtos/message-acknowledgement.dto";
 
 
 
-@WebSocketGateway()
+@WebSocketGateway({
+    cors:{
+        origin:"http://10.10.20.44:3000"
+    }
+})
+@UsePipes(
+  new ValidationPipe({
+    transform: true,
+    whitelist: true,
+  }),
+)
 @Injectable()
+
 export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect{
 
       
     @WebSocketServer()
     server:Server
 
-    usersSocket:Map<string, string>
+    private usersSocket:Map<string, string>
 
-    constructor (private readonly chatService:ChatService){
+    constructor (private readonly chatService:ChatService, private readonly userService:UserService){
         this.usersSocket = new Map<string, string>()
     }
  
@@ -37,16 +56,25 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
     async handleConnection(client: Socket, ...args: any[] ) {
         console.log(`client connected: ${client.id}`)
+
         try{
-            const userId = (client.handshake.query.userId as string)
-            this.usersSocket.set(userId.toString(), client.id)
+            const userId = client.handshake.query.userId as string
+            const user = await this.userService.findUserById(userId)
+
+            if(!user){
+                client.emit(EMIT_EVENTS.ERROR, {message:"Authentication failed"})
+                client.disconnect()
+                return
+            }
+            // Store the userId and its associated client.id
+            this.usersSocket.set(userId, client.id)
 
             client.data.userId = userId
             
-            client.emit(Events.SUCCESS, {message:"Successfully connected"})
-
+            client.emit(EMIT_EVENTS.SUCCESS, {message:"User Successfully Connected With Socket"})
+            
         }catch(err){
-            client.emit(Events.ERROR, err)
+            client.emit(EMIT_EVENTS.ERROR, err)
             client.disconnect()
             console.log("Authentication error", err)
            
@@ -66,23 +94,50 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         
     }
 
+    /**
+     * 
+     * @param data 
+     * @param client 
+     */
+
     @SubscribeMessage(SUBSCRIBED_EVENTS.MESSAGE)
-    async handleChat(@MessageBody() data:any, @ConnectedSocket() client:Socket){
+    async handleChat(@MessageBody() data:SendMessageDto, @ConnectedSocket() client:Socket){
 
         const userId = client.data.userId 
-        const chat = await this.chatService
-    
-        const socketRoomId = this.usersSocket.get(data.receiver.toString())
+        const chat = await this.chatService.createMessage(userId, data)
+
+        const receiverRoomId = this.usersSocket.get(data.receiver_id.toString())
         const sender = this.usersSocket.get(userId.toString())
 
-        if(sender){
-            this.server.to(sender).emit(Events.NEW_MESSAGE, chat)
+        if(receiverRoomId){
+            this.server.to(receiverRoomId).emit(EMIT_EVENTS.NEW_MESSAGE, chat)
         }
 
-       if(socketRoomId){
-        this.server.to(socketRoomId).emit(Events.NEW_MESSAGE, chat)
-       }
+        if(sender){
+            this.server.to(sender).emit(EMIT_EVENTS.MESSAGE_SENT, chat)
+        }
     }
+
+
+    @SubscribeMessage(SUBSCRIBED_EVENTS.MESSAGE_RECEIVED)
+    async handleMesssageDelivery( @MessageBody() acknowledgements:MessageAcknowledgementDto, @ConnectedSocket() client:Socket){
+
+        acknowledgements.messageIds.forEach(async (messageId)=>{
+            const chat = await this.chatService.acknowledgeMessageDelivery(messageId)
+            const senderSocketId = this.usersSocket.get(chat.sender_id)
+
+            if(senderSocketId){
+                this.server.to(senderSocketId).emit(EMIT_EVENTS.MESSAGE_DELIVERED, chat)
+            }
+        })
+    }
+
+    /**
+     * 
+     * @param receiverId 
+     * @param chat 
+     */
+   
 
     @SubscribeMessage(SUBSCRIBED_EVENTS.SEND_FILE)
     async handleFile( receiverId:string, chat:any){
@@ -91,36 +146,50 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         const socketRoomId = this.usersSocket.get(receiverId)
 
        if(socketRoomId){
-        this.server.to(socketRoomId).emit(Events.NEW_MESSAGE, chat)
+        this.server.to(socketRoomId).emit(EMIT_EVENTS.NEW_MESSAGE, chat)
        }
     }
 
+    /**
+     * 
+     * @param data 
+     * @param client 
+     */
 
-    @SubscribeMessage(SUBSCRIBED_EVENTS.FETCH_ROOMS)
-    async getAllUserRooms(@MessageBody() data:any, @ConnectedSocket() client:Socket){
+    @SubscribeMessage(SUBSCRIBED_EVENTS.FETCH_CHAT_ROOMS)
+    async getAllUserRooms(@MessageBody() getUserRoomsDto:GetUserRoomsDto, @ConnectedSocket() client:Socket ){
         const userId = client.data.userId
+        
+        const rooms = await this.chatService.getUserChatRooms(userId, getUserRoomsDto)
+        
+        const roomDto = plainToInstance(AllUserRoomsDto, rooms, {
+            excludeExtraneousValues : true
+         })
 
-        const rooms = await this.chatService
-        const socketRoomId = this.usersSocket.get(userId.toString())
+        const socketRoomId = this.usersSocket.get(userId)
     
         if(socketRoomId){
-            this.server.to(socketRoomId).emit(Events.ALL_ROOMS, {
-                rooms
+            this.server.to(socketRoomId).emit(EMIT_EVENTS.ALL_CHAT_ROOMS, {
+                roomDto
             })
         }
     }
 
     @SubscribeMessage(SUBSCRIBED_EVENTS.FETCH_MESSAGES)
-    async getAllRoomMessages(@MessageBody() data:{roomId:string}, @ConnectedSocket() client:Socket){
+    async getAllRoomMessages(@MessageBody() getAllMessageDto:GetAllMessagesDto, @ConnectedSocket() client:Socket){
         const userId = client.data.userId
-        console.log(data)
-        const messages = await this.chatService
+     
+        const messages = await this.chatService.getRoomMessages(userId, getAllMessageDto)
 
-         const socketRoomId = this.usersSocket.get(userId.toString())
+         const socketRoomId = this.usersSocket.get(userId)
+
+         const messageDto = plainToInstance(AllMessageDto, messages, {
+            excludeExtraneousValues : true
+         })
 
         if(socketRoomId){
-            this.server.to(socketRoomId).emit(Events.ALL_MESSAGES, {
-                messages
+            this.server.to(socketRoomId).emit(EMIT_EVENTS.ALL_MESSAGES, {
+                messageDto
             })
         }
     }

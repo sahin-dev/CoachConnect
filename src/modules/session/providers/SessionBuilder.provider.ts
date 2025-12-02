@@ -69,40 +69,53 @@ export class SessionBuilder{
     }
 
 
-    /**
-   * @deprecated Use setDateTime() instead.
-   */
-    setStartDate(datetime:string){
-        const covertedDate = new Date(datetime)
+   
+    private setStartDate(datetime:Date){
+        const startDate = new Date(datetime)
         const currentDate = new Date(Date.now())
-
-        if(covertedDate <= currentDate){
-            
+        console.log(startDate)
+        if(startDate <= currentDate){
+            throw new Error("Error occured during setting start time. Start date must be in future.")
         }
-        this.session.started_at = new Date(datetime)
-
-        return this
+        this.session.started_at = startDate
 
     }
 
-    setStartTime(date:string, time:string){
+    private setCompletedAt(date:Date){
+      
+        this.session.completed_at = date
+    }
 
-        const [hours, minutes] = this.getTimeParts(time)
-        const startedDate = new Date(date).setUTCHours(hours + this.getTimeZoneOffset() , minutes + this.getTimeZoneOffset())
+    setStartAt(date:string, time:string){
 
-        this.session.started_at = new Date(startedDate)
+        const startDate = this.getUtcDate(date,time)
+
+        const completedDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
+     
+        this.setStartDate(new Date(startDate))
         
         // set completed time after 24 hour from start 
-        this.session.completed_at = new Date(startedDate + 24 * 60 * 60 * 1000)
+       this.setCompletedAt(completedDate)
 
         return this
     }
 
 
+    private getUtcDate(date:string, time:string):Date{
 
+        const [hours, minutes] = this.getTimeParts(time)
+        const [m,d,y] = this.getDateParts(date)
+        
+        return new Date(Date.UTC(y,m-1,d,hours,minutes))
+
+    }
     private getTimeParts(time:string){
         const [splittedTime, ampm] = time.split(" ")
         return splittedTime.split(":").map(part => Number(part))
+    }
+
+    private getDateParts(date:string){
+        return date.split("/").map(part => Number(part))
     }
 
     private getTimeZoneOffset(){

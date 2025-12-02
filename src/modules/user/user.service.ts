@@ -18,6 +18,7 @@ import { User } from "generated/prisma/client";
 import { ForgetPasswordDto } from "./dtos/forget-password.dto";
 import { CheckOtpValidation } from "src/common/providres/CheckOtpValidation.provider";
 import { ResetPasswordDto } from "./dtos/reset-password.dto";
+import { defaultConfig } from "./constants/default_image";
 
 
 @Injectable()
@@ -36,9 +37,16 @@ export class UserService{
      * @returns 
      */
     async addUser(createUserDto:CreateUserDto){
+        let avatar:string | undefined
+
+        if(createUserDto.role === UserRole.PLAYER){
+            avatar = defaultConfig.DEFAULT_PLAYER_IMAGE
+        }else {
+            avatar = defaultConfig.DEFAULT_COACH_IMAGE
+        }
 
         const hashedPassword = await this.encoder.hashPassword(createUserDto.password, 10)
-        const user = await this.prismaService.user.create({data:{...createUserDto, password:hashedPassword}})
+        const user = await this.prismaService.user.create({data:{...createUserDto, password:hashedPassword, avatar}})
 
         return user
     }
@@ -146,7 +154,7 @@ export class UserService{
       ])
 
 
-      return {users, page:query.page, limit:query.limit, pages:Math.ceil(total / query.limit)}
+      return {users, page:query.page, limit:query.limit, total, pages:Math.ceil(total / query.limit)}
 
     }
 
@@ -246,16 +254,23 @@ export class UserService{
         return "A verification email sent to your email."
 
     }
+
     /**
      * 
      * @param verifyOtpDto 
      */
 
     async verifyResetPasswordRequest(verifyOtpDto:VerifyOtpDto){
-        const otp = await this.prismaService.otp.findFirst({where:{email:verifyOtpDto.email, otp_status:OtpStatus.CREATED}})
+        const otp = await this.prismaService.otp.findFirst({where:{email:verifyOtpDto.email, otp_status:OtpStatus.CREATED, code:verifyOtpDto.otp}})
+    
+        if(!otp || !CheckOtpValidation.check(verifyOtpDto.otp, otp)){
+            
+            throw new BadRequestException("otp invalid or expired") 
+        }
 
-        if(!(otp && CheckOtpValidation.check(verifyOtpDto.otp, otp))){
-            throw new BadRequestException("otp invalid or expired")
+        if(otp.expires_in < new Date(Date.now())){
+            await this.prismaService.otp.update({where:{id:otp?.id}, data:{otp_status:OtpStatus.INVALID}})
+            throw new BadRequestException("otp expired!Please try again")
         }
 
         const updatedOtp = await this.prismaService.otp.update({where:{id:otp.id}, data:{otp_status:OtpStatus.VERIFIED}})
@@ -349,7 +364,13 @@ export class UserService{
             throw new BadRequestException("Password is incorrect")
         }
 
-        await this.prismaService.user.delete({where:{id:user.id}})
+        const createdSessions = await this.prismaService.session.findMany({where:{coach_id:userId}})
+
+        if(createdSessions.length > 0){
+            throw new BadRequestException("You have created sessions. You can not delete account")
+        }
+
+        await this.prismaService.user.delete({where:{id:user.id, is_deleted:true}})
         
     }
     /**
@@ -404,10 +425,16 @@ export class UserService{
             throw new NotFoundException("User not found")
         }
 
-        const otp = await this.prismaService.otp.findFirst({where:{email:verifyOtpDto.email, otp_status:OtpStatus.CREATED}})
-
-        if(!(otp && CheckOtpValidation.check(verifyOtpDto.otp, otp))){
+        const otp = await this.prismaService.otp.findFirst({where:{email:verifyOtpDto.email,code:verifyOtpDto.otp, otp_status:OtpStatus.CREATED}})
+     
+        if(!otp || !CheckOtpValidation.check(verifyOtpDto.otp, otp)){
+           
             throw new BadRequestException("otp invalid or expired")
+        }
+
+        if(otp.expires_in < new Date(Date.now())){
+            await this.prismaService.otp.update({where:{id:otp?.id}, data:{otp_status:OtpStatus.INVALID}})
+            throw new BadRequestException("otp expired!Please try again")
         }
        
         // get the new email from otp data
@@ -431,6 +458,51 @@ export class UserService{
     private async setNewEmail(userId:string, newEmail:string){
 
         await this.prismaService.user.update({where:{id:userId}, data:{email:newEmail}})
+    }
+
+    /**
+     * 
+     * @param userId 
+     */
+
+    async toggleUserBlockStatus(userId:string){
+
+        const user = await this.prismaService.user.findUnique({where:{id:userId}})
+        if(!user){
+            throw new NotFoundException("User not found")
+        }
+        if(user.is_blocked){
+            await this.unblockUser(userId)
+        }else {
+            await this.blockUser(userId)
+        }
+    }
+
+    /**
+     * 
+     * @param userId 
+     */
+
+    async blockUser(userId:string){
+
+        const user = await this.prismaService.user.findUnique({where:{id:userId}})
+        if(!user){
+            throw new NotFoundException("User not found")
+        }
+        await this.prismaService.user.update({where:{id:user.id}, data:{is_blocked:true}})
+    }
+
+    /**
+     * 
+     * @param userId 
+     */
+    async unblockUser(userId:string){
+
+        const user = await this.prismaService.user.findUnique({where:{id:userId}})
+        if(!user){
+            throw new NotFoundException("User not found")
+        }
+        await this.prismaService.user.update({where:{id:user.id}, data:{is_blocked:false}})
     }
 
     /**

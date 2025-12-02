@@ -1,6 +1,6 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import  {GlobalHttpExceptionHandler}  from './common/exceptions/GlobalHttpExceptionHandler';
 import { ResponseTransformerInterceptor } from './common/interceptors/responseTransformer.interceptor';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -15,6 +15,12 @@ async function bootstrap() {
   app.setGlobalPrefix("/api/v1", {
     exclude:["/"]
   })
+
+//   app.useGlobalInterceptors(
+//     new ClassSerializerInterceptor(app.get(Reflector), {
+//       strategy: 'excludeAll',
+//     }),
+// );
 
   const staticFilePath = join(__dirname, '..', 'uploads')
 

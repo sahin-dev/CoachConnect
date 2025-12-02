@@ -1,4 +1,4 @@
-import { BadRequestException, Body, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { SigninDto } from "./dtos/signin.dto";
 import { RegisterUserDto } from "./dtos/register-user.dto";
 import { UserService } from "../user/user.service";
@@ -14,6 +14,7 @@ import { User } from "generated/prisma";
 
 @Injectable()
 export class AuthService {
+        private readonly logger = new Logger(AuthService.name);
 
     constructor (private readonly userService:UserService,
          private readonly encoder:EncoderProvider,
@@ -22,16 +23,31 @@ export class AuthService {
           private readonly jwtService:JwtService
         ){}
 
+        /**
+         * 
+         * @param signInDto 
+         * @returns 
+         */
 
     async signin ( signInDto:SigninDto){
         
         const user = await this.userService.findUserByEmail(signInDto.email)
 
+
         if(!user){
             throw new NotFoundException("No account is associated with this email address. Please sign up first.")
         }
-        
 
+        if(user.is_deleted){
+            throw new BadRequestException("Sorry! Your account has been deleted.")
+        }
+
+        if(user.is_blocked){
+            
+            throw new BadRequestException("Sorry! Your account has been blocked. Please contact support for more information.")
+        }
+
+        
         if(! (await this.comparePassword(signInDto.password, user.password))){
 
             throw new BadRequestException("credentials does not matched!")
@@ -43,17 +59,56 @@ export class AuthService {
         }
 
         const token = await this.signJwtToken(user)
+        this.logger.log(`${user.fullName} logged in.`)
 
         return {...user, token}
 
     }
+    /**
+     * 
+     * @param email 
+     * @param password 
+     * @returns 
+     */
+
+    async adminSignIn(signInDto:SigninDto){
+
+        const user = await this.userService.findUserByEmail(signInDto.email)
+        if(!user){
+            throw new NotFoundException("No account is associated with this email address. Please sign up first.")
+        }
+        if(user.role !== 'ADMIN'){
+            throw new BadRequestException("You are not authorized to access this resource.")
+        }
+        if(! (await this.comparePassword(signInDto.password, user.password))){
+
+            throw new BadRequestException("credentials does not matched!")
+        }
+        const token = await this.signJwtToken(user)
+        this.logger.log(`Admin ${user.fullName} logged in.`)
+
+        return {...user, token}
+    }
+
+    /**
+     * 
+     * @param user 
+     * @returns 
+     */
 
     private async signJwtToken(user:User){  
-        const token = await this.jwtService.signAsync({id:user.id, role:user.role, email:user.email, email_verified:user.email_verified})
+        const token = await this.jwtService.signAsync({id:user.id, role:user.role, email:user.email, email_verified:user.email_verified}, {
+            expiresIn: "90d"
+        })
 
         return token
     }
 
+    /**
+     * 
+     * @param registerUserDto 
+     * @returns 
+     */
 
 
      async registerUser (@Body() registerUserDto:RegisterUserDto) {
@@ -69,6 +124,12 @@ export class AuthService {
         return `A verification mail sent to ${user.email}`
     }
 
+    /**
+     * 
+     * @param email 
+     * @param code 
+     * @returns 
+     */
 
     async verifyEamil(email:string, code:number){
         const existingCode = await this.prismaService.otp.findFirst({where:{code, email, otp_status:OtpStatus.CREATED}})
@@ -93,6 +154,11 @@ export class AuthService {
         return {message:"email verified. Please log in to your account"}
     }
 
+    /**
+     * 
+     * @param email 
+     * @returns 
+     */
     async resendEmailVerificationCode(email:string){
         const user = await this.userService.findUserByEmail(email)
 
@@ -104,31 +170,52 @@ export class AuthService {
         return {message:"email verification code resent successfully"}
     }
 
+    /**
+     * 
+     * @param password 
+     * @param hash 
+     * @returns 
+     */
 
     private async comparePassword(password:string, hash:string):Promise<boolean>{
 
         return await this.encoder.compare(password, hash)
     }
 
+    /**
+     * 
+     * @returns 
+     */
 
     private generateEmailVerificationCode(){
 
-        return Math.round(Math.random() * 900000)
+        return Math.round(100000 + Math.random() * 900000)
     }
 
+    /**
+     * 
+     * @param name 
+     * @param email 
+     */
 
     private async sendEmailVerificationCode(name:string, email:string){
 
         const code = this.generateEmailVerificationCode()
-        const expirationTime = new Date(Date.now() + 5 * 60 * 1000)
+        const expirationTime = new Date(Date.now() + 10 * 60 * 1000)
 
         await this.prismaService.otp.create({data:{code, for:OtpFor.Email_Verification, email, expires_in:expirationTime}})
 
-        const emailTemplate = emailVerificationTemplate({name,verificationCode:code, verificationCodeExpire:5})
+        const emailTemplate = emailVerificationTemplate({name,verificationCode:code, verificationCodeExpire:10})
 
         this.mailProvider.sendMail(email, "Email Verification code", emailTemplate)
     }
 
+    /**
+     * 
+     * @param email 
+     * @param password 
+     * @returns 
+     */
 
     async deleteAccount(email:string, password:string){
 
@@ -145,6 +232,12 @@ export class AuthService {
 
         return deletedUser
     }
+
+    /**
+     * 
+     * @param userId 
+     * @returns 
+     */
 
     async getAuthenticatedUser(userId:string){
 

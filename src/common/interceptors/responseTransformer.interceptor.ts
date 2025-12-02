@@ -1,4 +1,4 @@
-import { CallHandler, ExecutionContext, NestInterceptor } from "@nestjs/common";
+import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Response } from "express";
 import { map, Observable } from "rxjs";
@@ -10,9 +10,9 @@ export interface ApiResponse<T> {
     statusCode:number,
     data:T
 }
-
+@Injectable()
 export class ResponseTransformerInterceptor<T> implements NestInterceptor<T, ApiResponse<T>>{
-   constructor( private readonly reflector:Reflector){}
+   constructor(private readonly reflector:Reflector){}
 
     intercept(context: ExecutionContext, next: CallHandler<any>): Observable<ApiResponse<T>> | Promise<Observable<ApiResponse<T>>> {
         

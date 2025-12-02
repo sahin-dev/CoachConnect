@@ -1,8 +1,9 @@
 import { Expose, Type } from "class-transformer";
 import { UserResponseDto } from "./user-response.dto";
 import { ValidateNested } from "class-validator";
+import { PaginationResponseDto } from "src/common/dtos/pagination-response.dto";
 
-export class AllUsersResponseDto{
+export class AllUsersResponseDto extends PaginationResponseDto{
     @Expose()
      @ValidateNested()
     @Type(() => UserResponseDto)
@@ -16,4 +17,6 @@ export class AllUsersResponseDto{
 
     @Expose()
     pages:number
+
+ 
 }

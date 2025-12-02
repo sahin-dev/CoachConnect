@@ -16,7 +16,11 @@ import { diskStorage } from "multer";
 import { ForgetPasswordDto } from "./dtos/forget-password.dto";
 import { VerifyOtpDto } from "./dtos/verify-otp.dto";
 import { ResetPasswordDto } from "./dtos/reset-password.dto";
-import { STATUS_CODES } from "http";
+import { Public } from "src/common/decorators/public.decorator";
+import { randomUUID } from "crypto";
+import { Roles } from "src/common/decorators/role.decorator";
+import { UserRole } from "generated/prisma/enums";
+import { TogggleBlockUserDto } from "./dtos/block-user.dto";
 
 @Controller({
 path:"users",
@@ -25,21 +29,25 @@ export class UserController {
 
     constructor(private readonly userService:UserService){}
 
-    // @Post()
-    // async addUser(@Body() createUserDto:CreateUserDto){
-    //     const user = await this.userService.addOneUser(createUserDto)
+    /**
+     * 
+     * @param query 
+     * @returns 
+     */
 
-    //     return user
-    // }
     @Get()
+    @ResponseMessage("Users fetched successfully")
+    // @Roles(UserRole.ADMIN)
     async getAllUSers(@Query() query:UserQueryDto){
         
         const data = await this.userService.getUsers(query)
-  
+   
         return plainToInstance(AllUsersResponseDto,data, {
-            excludeExtraneousValues:true
+            excludeExtraneousValues:true,
+            groups:["admin"]
         })
     }
+
 
     /**
      * 
@@ -56,12 +64,10 @@ export class UserController {
            destination:"./uploads/users",
 
             filename:(req, file,cb) => {
-
+                const uuid = randomUUID().toString()
                 const [_, ext] = file.originalname.split(".")
 
-                const tokenPayload = req['payload'] as TokenPayload
-
-                cb(null, `avatar_${tokenPayload.id}.${ext}`)
+                cb(null, `avatar_${uuid}.${ext}`)
             }
         })
     }))
@@ -103,6 +109,7 @@ export class UserController {
 
     @Post("forget-password")
     @ResponseMessage("Reset password request sumitted successfully")
+    @Public()
     async initiateResetPasswordRequest(@Body() forgetPasswordDto:ForgetPasswordDto){
         const result = await this.userService.initiateResetPasswordRequest(forgetPasswordDto)
 
@@ -112,6 +119,7 @@ export class UserController {
     @Post("verify-otp")
     @ResponseMessage("Otp verified successfully")
     @HttpCode(HttpStatus.OK)
+    @Public()
     async verifyOtp(@Body() verifyOtpDto:VerifyOtpDto){
         const result = await this.userService.verifyResetPasswordRequest(verifyOtpDto)
 
@@ -120,6 +128,7 @@ export class UserController {
 
     @Patch("reset-password")
     @ResponseMessage("Password updated successfully")
+    @Public()
     async resetPassword(@Body() resetPasswordDto:ResetPasswordDto){
 
         const updatedUser = await this.userService.resetPassword(resetPasswordDto)
@@ -127,6 +136,13 @@ export class UserController {
         return plainToInstance(UserResponseDto, updatedUser, {
             excludeExtraneousValues: true
         })
+    }
+
+    @Patch("admin/toggle-block")
+    @ResponseMessage("User block status updated successfully")
+    @Roles(UserRole.ADMIN)
+    async toggleBlockUser(@Body() toggoleBlockUserDto:TogggleBlockUserDto){
+        return this.userService.toggleUserBlockStatus(toggoleBlockUserDto.userId)
     }
 
 }

@@ -1,5 +1,4 @@
 import { Expose, Transform } from "class-transformer";
-import path from "node:path";
 
 export class UserResponseDto {
 
@@ -8,12 +7,12 @@ export class UserResponseDto {
 
     @Expose()
     @Transform(obj => {
-        let value = obj.value as string
-        if(value){
+            
+        if(obj.value){
+            let value = obj.value as string
             value =  value.replaceAll("\\", "\/")
+                return `${value}`
         }
-
-        return `${process.env.BASE_PATH}/${value}`
     })
     
     avatar:string
@@ -30,9 +29,21 @@ export class UserResponseDto {
     @Expose()
     role:string
 
-    @Expose()
+    @Expose({
+        groups: ['admin']
+    })
     email_verified:boolean
 
-    @Expose()
+    @Expose({
+        groups: ['admin']
+    })
     is_deleted:boolean
+    
+    @Expose({
+        groups: ['admin']
+    })
+    is_blocked:boolean
+
+   
+
 }
