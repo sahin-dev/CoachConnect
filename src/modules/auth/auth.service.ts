@@ -190,7 +190,7 @@ export class AuthService {
         return {message:"email verified. Please log in to your account"}
     }
 
-    
+
     /**
      * 
      * @param email 
@@ -207,7 +207,7 @@ export class AuthService {
         return {message:"email verification code resent successfully"}
     }
 
-    /**
+    /**                                                                                                                                                                                                                         a
      * 
      * @param password 
      * @param hash 
