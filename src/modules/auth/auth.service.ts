@@ -70,7 +70,7 @@ export class AuthService {
                 })
             }else{
                 if(user.free_trial_expires_at && (user.free_trial_expires_at < new Date(Date.now()))){
-                    return {free_trial_expired:true, free_trial_expires_at:user.free_trial_expires_at}
+                    return {...user, free_trial_expired:true, free_trial_expires_at:user.free_trial_expires_at}
                 }
             }
 
