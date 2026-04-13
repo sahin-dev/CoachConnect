@@ -61,7 +61,12 @@ export class AuthService {
             return {email_verified:false, message:"A verification code sent to your email. Kindly verify your email first."}
         }
 
-        if (user.role === UserRole.COACH){
+       
+        await this.userService.updateFcmToken(user.id, signInDto.fcm_token)
+
+        const token = await this.signJwtToken(user)
+
+         if (user.role === UserRole.COACH){
             if(!user.free_trial_started){
                 user = await this.userService.activateTrialPeriod(user.email)
                 Object.defineProperty(user, "first_time_logged_in_after_trial_started", {
@@ -70,14 +75,11 @@ export class AuthService {
                 })
             }else{
                 if(user.free_trial_expires_at && (user.free_trial_expires_at < new Date(Date.now()))){
-                    return {...user, free_trial_expired:true, free_trial_expires_at:user.free_trial_expires_at}
+                    return {...user,token, free_trial_expired:true, free_trial_expires_at:user.free_trial_expires_at}
                 }
             }
 
         }
-        await this.userService.updateFcmToken(user.id, signInDto.fcm_token)
-
-        const token = await this.signJwtToken(user)
         this.logger.log(`${user.fullName} logged in.`)
         
         this.CacheManager.set(`user:${user.id}`, user, 3600 )
